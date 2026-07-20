@@ -1,0 +1,17 @@
+/[Library]/
+/[Temp]/
+/[Obj]/
+/[Logs]/
+/[UserSettings]/
+/[Build]/
+/[Builds]/
+/[Autobackup]/
+/assets/AssetStoreTools*
+.vs/
+.vsconfig
+*.csproj
+*.sln
+*.suo
+*.user
+*.userprefs
+obj/
