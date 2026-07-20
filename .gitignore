@@ -1,12 +1,14 @@
-/[Library]/
-/[Temp]/
-/[Obj]/
-/[Logs]/
-/[UserSettings]/
-/[Build]/
-/[Builds]/
-/[Autobackup]/
-/assets/AssetStoreTools*
+# Unity の自動生成ファイルを完全に除外
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+/[Bb]uild/
+/[Bb]uilds/
+/[Aa]utobackup/
+
+# 開発環境の個人設定ファイル
 .vs/
 .vsconfig
 *.csproj
@@ -14,4 +16,3 @@
 *.suo
 *.user
 *.userprefs
-obj/
