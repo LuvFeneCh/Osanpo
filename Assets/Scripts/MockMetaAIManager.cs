@@ -16,6 +16,10 @@ public class MockMetaAIManager : MonoBehaviour
     [Header("生成位置")]
     public Transform spawnPoint; // 画面右端など、ピースを生成する場所
 
+    [Header("自動生成の設定")]
+    public float spawnInterval = 1.0f; // 生成する間隔（秒）
+    private float spawnTimer = 0f;
+
     // メタAIの内部パラメータ：試練テーブルが選ばれる確率（0.0〜1.0）
     private float trialProbability = 0.5f;
 
@@ -38,6 +42,14 @@ public class MockMetaAIManager : MonoBehaviour
         {
             OnPlayerDeath(5.0f);
         }
+
+        // --- ここから追加：定期的な自動生成タイマー ---
+        spawnTimer += Time.deltaTime;
+        if (spawnTimer >= spawnInterval)
+        {
+            spawnTimer = 0f; // タイマーをリセット
+            SpawnNextPiece(); // 確率に基づいて次のピース（足場or穴）を生成
+        }
     }
 
     /// <summary>
@@ -51,8 +63,7 @@ public class MockMetaAIManager : MonoBehaviour
         // 1. 乱数を用いてAIの文脈分析をシミュレート
         SimulateAIAnalysis(retryTime);
 
-        // 2. 変動した確率に基づいて、次の地形ピースを生成
-        SpawnNextPiece();
+        // ※注意：ここにあった SpawnNextPiece(); は削除してください！
 
         // 3. 画面上のデバッグ表示を更新
         UpdateDebugDisplay();
