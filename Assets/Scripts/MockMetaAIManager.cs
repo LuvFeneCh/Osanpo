@@ -1,5 +1,5 @@
 ﻿using UnityEngine;
-using TMPro; // GMのセリフ表示用
+using TMPro;
 
 public class MockMetaAIManager : MonoBehaviour
 {
@@ -7,134 +7,152 @@ public class MockMetaAIManager : MonoBehaviour
     public TextMeshProUGUI gmText;
 
     [Header("デバッグ表示設定")]
-    public TextMeshProUGUI debugText; // 【新規】左上に確率を表示するためのUI
+    public TextMeshProUGUI debugText; // 左上に確率等を表示するためのUI
 
     [Header("地形ピース（Prefab）の登録")]
     public GameObject[] reliefPieces; // 救済用テーブル（安全な足場など）
-    public GameObject[] trialPieces;  // 試練用テーブル（トゲ床、敵など）
+    public GameObject[] trialPieces;  // 試練用テーブル（トゲ床、穴など）
 
-    [Header("生成位置")]
-    public Transform spawnPoint; // 画面右端など、ピースを生成する場所
+    [Header("プレイヤー連動生成の設定")]
+    public Transform player;
+    public float pieceWidth = 5.0f;
+    public float spawnDistance = 10.0f;
+    public float spawnY = -3.0f;
 
-    [Header("自動生成の設定")]
-    public float spawnInterval = 1.0f; // 生成する間隔（秒）
-    private float spawnTimer = 0f;
+    private float nextSpawnX = 0f;
 
-    // メタAIの内部パラメータ：試練テーブルが選ばれる確率（0.0〜1.0）
+    // --- メタAIの内部パラメータ ---
     private float trialProbability = 0.5f;
+
+    // --- プレイヤーのプレイログ用変数 ---
+    private float currentSurvivalTime = 0f; // 現在の生存時間
+    private int totalMissCount = 0;         // 通算のミス回数
 
     void Start()
     {
-        // 起動時に一度デバッグ表示を更新しておく
         UpdateDebugDisplay();
+
+        // 初期足場の生成
+        for (int i = 0; i < 3; i++)
+        {
+            SpawnNextPiece();
+        }
     }
 
     void Update()
     {
-        // Tキー：即リトライ（1秒）＝ 試練の確率UP
+        // 毎フレーム生存時間をカウントアップ
+        currentSurvivalTime += Time.deltaTime;
+
+        // デバッグ表示を常に更新（生存時間をリアルタイム表示するため）
+        UpdateDebugDisplay();
+
+        // テスト用：Tキーで「すぐ死んだ」扱いにする
         if (Input.GetKeyDown(KeyCode.T))
         {
-            OnPlayerDeath(1.0f);
+            currentSurvivalTime = 1.5f;
+            OnPlayerDeath();
         }
 
-        // Eキー：ゆっくりリトライ（5秒）＝ 救済の確率UP
+        // テスト用：Eキーで「長く生き残ってから死んだ」扱いにする
         if (Input.GetKeyDown(KeyCode.E))
         {
-            OnPlayerDeath(5.0f);
+            currentSurvivalTime = 12.0f;
+            OnPlayerDeath();
         }
 
-        // --- ここから追加：定期的な自動生成タイマー ---
-        spawnTimer += Time.deltaTime;
-        if (spawnTimer >= spawnInterval)
+        // プレイヤーの位置に基づいた自動生成
+        if (player != null && (player.position.x + spawnDistance) > nextSpawnX)
         {
-            spawnTimer = 0f; // タイマーをリセット
-            SpawnNextPiece(); // 確率に基づいて次のピース（足場or穴）を生成
+            SpawnNextPiece();
         }
     }
 
     /// <summary>
     /// プレイヤーが死亡（ミス）した時に呼ばれる関数。
-    /// ここで操作ログ（今回はリトライまでの時間）を受け取る想定。
+    /// （※実際にプレイヤーが死ぬ処理から、この関数を呼び出してください）
     /// </summary>
-    public void OnPlayerDeath(float retryTime)
+    public void OnPlayerDeath()
     {
-        Debug.Log($"【ログ受信】プレイヤー死亡。リトライ時間: {retryTime}秒");
+        totalMissCount++; // ミス回数を加算
+        Debug.Log($"【ログ受信】死亡。生存時間: {currentSurvivalTime:F1}秒 / ミス回数: {totalMissCount}回");
 
-        // 1. 乱数を用いてAIの文脈分析をシミュレート
-        SimulateAIAnalysis(retryTime);
+        // 1. 生存時間とミス回数を渡してAI分析
+        SimulateAIAnalysis(currentSurvivalTime, totalMissCount);
 
-        // ※注意：ここにあった SpawnNextPiece(); は削除してください！
-
-        // 3. 画面上のデバッグ表示を更新
-        UpdateDebugDisplay();
+        // 2. 次のプレイに向けて生存時間をリセット
+        currentSurvivalTime = 0f;
     }
 
     /// <summary>
-    /// 本来は外部Pythonサーバーが行う「分析と指示」のモックアップ
+    /// 複数の条件（生存時間・ミス回数）を組み合わせてプレイスタイルを判定する
     /// </summary>
-    private void SimulateAIAnalysis(float retryTime)
+    private void SimulateAIAnalysis(float survivalTime, int missCount)
     {
-        // リトライ速度からプレイスタイルを判定（疑似）
-        if (retryTime < 2.0f)
+        // パターンA：ミスが多く、かつすぐ死んでしまう（停滞・挫折の危機）
+        if (missCount >= 3 && survivalTime < 3.0f)
         {
-            // 即リトライ ＝ 自力クリア派（熱中状態）と仮定
-            // 乱数を混ぜてAIの「粗（揺らぎ）」を表現しつつ、試練の確率を上げる
-            trialProbability += 0.2f + Random.Range(-0.05f, 0.1f);
-            gmText.text = "やる気満々だね！次は少し難しくするよ！";
+            trialProbability -= 0.3f + Random.Range(0f, 0.1f);
+            gmText.text = "大丈夫？少し落ち着いて。次は安全な道を用意するね。";
         }
+        // パターンB：長く生き残った末のミス（集中・順調）
+        else if (survivalTime >= 10.0f)
+        {
+            trialProbability += 0.2f + Random.Range(-0.05f, 0.1f);
+            gmText.text = "惜しい！かなり進めるようになってきたね。少し難易度を上げるよ！";
+        }
+        // パターンC：ミス回数は少ないが、リトライが早い（強気・焦り）
+        else if (missCount < 3 && survivalTime < 4.0f)
+        {
+            trialProbability += 0.1f;
+            gmText.text = "ちょっと焦ってるかな？でもその意気だね！";
+        }
+        // パターンD：その他（通常）
         else
         {
-            // リトライが遅い ＝ 救済派（停滞状態）と仮定
-            // 救済の確率を上げる（試練の確率を下げる）
-            trialProbability -= 0.2f + Random.Range(-0.05f, 0.1f);
-            gmText.text = "休憩しよう。次は安全な道を用意したよ。";
+            trialProbability -= 0.1f;
+            gmText.text = "ドンマイ！その調子で次も頑張ろう！";
         }
 
         // 確率が0〜1の範囲を超えないように制限
         trialProbability = Mathf.Clamp(trialProbability, 0.0f, 1.0f);
     }
 
-    /// <summary>
-    /// 確率テーブルに基づいてピースを選択し、生成する
-    /// </summary>
     private void SpawnNextPiece()
     {
         GameObject pieceToSpawn = null;
-
-        // 0.0〜1.0の乱数を振り、試練か救済かを決定
         float roll = Random.Range(0.0f, 1.0f);
 
         if (roll <= trialProbability)
         {
-            // 試練テーブルからランダムに1つ選択
             int index = Random.Range(0, trialPieces.Length);
             pieceToSpawn = trialPieces[index];
         }
         else
         {
-            // 救済テーブルからランダムに1つ選択
             int index = Random.Range(0, reliefPieces.Length);
             pieceToSpawn = reliefPieces[index];
         }
 
-        if (pieceToSpawn != null && spawnPoint != null)
+        if (pieceToSpawn != null)
         {
-            Instantiate(pieceToSpawn, spawnPoint.position, Quaternion.identity);
+            Vector3 spawnPos = new Vector3(nextSpawnX, spawnY, 0f);
+            Instantiate(pieceToSpawn, spawnPos, Quaternion.identity);
+            nextSpawnX += pieceWidth;
         }
     }
 
-    /// <summary>
-    /// 画面左上に確率情報を表示する（デバッグ用）
-    /// </summary>
     private void UpdateDebugDisplay()
     {
         if (debugText != null)
         {
             float reliefProb = 1.0f - trialProbability;
 
-            // UIに情報を表示。漢字が含まれるのでフォントアセットの設定が必要です。
-            debugText.text = $"<color=#ff4d4d>試練確率: {trialProbability * 100:F1}%</color>\n" +
-                             $"<color=#4dff4d>救済確率: {reliefProb * 100:F1}%</color>";
+            // Colorタグを削除し、生存時間とミス回数の情報も追加
+            debugText.text = $"試練確率: {trialProbability * 100:F1}%\n" +
+                             $"救済確率: {reliefProb * 100:F1}%\n" +
+                             $"生存時間: {currentSurvivalTime:F1}秒\n" +
+                             $"ミス回数: {totalMissCount}回";
         }
     }
 }

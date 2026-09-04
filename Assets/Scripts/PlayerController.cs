@@ -4,6 +4,8 @@ public class PlayerController : MonoBehaviour
 {
     [Header("ジャンプ力")]
     public float jumpForce = 6f;
+    [Header("移動速度")]
+    public float moveSpeed = 5.0f;
 
     private Rigidbody2D rb;
     private Vector3 startPosition; // リトライ時の復活位置
@@ -25,6 +27,12 @@ public class PlayerController : MonoBehaviour
     {
         // 毎フレーム、プレイ時間を計測する
         aliveTime += Time.deltaTime;
+
+        // Aキー(-1) / Dキー(1) の入力を受け取る
+        float moveInput = Input.GetAxisRaw("Horizontal");
+
+        // 左右の移動速度を設定（Y軸の落下速度はそのまま維持）
+        rb.velocity = new Vector2(moveInput * moveSpeed, rb.velocity.y);
 
         // --- ジャンプ処理 ---
         if (Input.GetKeyDown(KeyCode.Space))
@@ -63,7 +71,7 @@ public class PlayerController : MonoBehaviour
         MockMetaAIManager aiManager = FindObjectOfType<MockMetaAIManager>();
         if (aiManager != null)
         {
-            aiManager.OnPlayerDeath(aliveTime);
+            aiManager.OnPlayerDeath();
         }
 
         // 2. プレイヤーの位置を初期位置に戻す（リトライ）
