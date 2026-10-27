@@ -1,109 +1,239 @@
-﻿using UnityEngine;
+﻿using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.Networking;
 using TMPro;
+using System.Text;
 
 public class MockMetaAIManager : MonoBehaviour
 {
+    [System.Serializable]
+    public class LogData
+    {
+        public float survivalTime;
+        public int missCount;
+        public float currentProbability;
+    }
+
+    [System.Serializable]
+    public class ResponseData
+    {
+        public float newProbability;
+        public string message;
+    }
+
+    [Header("通信設定")]
+    public string serverUrl = "http://127.0.0.1:5000/api/evaluate";
+
     [Header("GMのUI設定")]
     public TextMeshProUGUI gmText;
     public TextMeshProUGUI debugText;
+    public TextMeshProUGUI goalText; // ゴール用UI
 
     [Header("地形ピース（Prefab）の登録")]
-    public GameObject[] reliefPieces; // 救済用（安全な足場など）
-    public GameObject[] trialPieces;  // 試練用（トゲ床、穴など）
+    public GameObject startPrefab;    // 【追加】スタート専用のPrefab
+    public GameObject[] reliefPieces;
+    public GameObject[] trialPieces;
+    public GameObject goalPrefab;
 
     [Header("プレイヤー連動生成の設定")]
-    public Transform player;            // 【重要】プレイヤーを登録
-    public float pieceWidth = 5.0f;     // 足場1つ分の横幅
-    public float spawnDistance = 15.0f; // プレイヤーの何メートル先に生成するか
-    public float spawnY = -3.0f;        // 足場を生成する高さ
+    public Transform player;
+    public float pieceWidth = 5.0f;
+    public float spawnDistance = 15.0f;
+    public float spawnY = -3.0f;
 
-    private float nextSpawnX = 0f;      // 次に足場を置くX座標
+    private float nextSpawnX = 0f;
 
-    // --- メタAIの内部パラメータ ---
+    [Header("ゴールの設定")]
+    public int piecesToGoal = 20;
+
+    private int currentPieceCount = 0;
+    private bool isGoalSpawned = false;
+
+    private Vector3 playerStartPos;
+    private List<GameObject> spawnedPieces = new List<GameObject>();
+
+    // --- 内部パラメータ ---
     private float trialProbability = 0.5f;
     private float currentSurvivalTime = 0f;
     private int totalMissCount = 0;
 
+    // ---------------------------------------------------------
+    // 【追加】ゲームが進行中（プレイ中）かどうかを管理するフラグ
+    // ---------------------------------------------------------
+    private bool isPlaying = false;
+
     void Start()
     {
         UpdateDebugDisplay();
-        // 落下防止のため、開始直後にいくつか生成しておく
-        for (int i = 0; i < 3; i++)
+
+        if (player != null)
         {
-            SpawnNextPiece();
+            playerStartPos = player.position;
         }
+
+        ResetTerrain();
     }
 
     void Update()
     {
-        // 生存時間の計測
-        currentSurvivalTime += Time.deltaTime;
-        UpdateDebugDisplay();
+        // ---------------------------------------------------------
+        // 【追加】プレイ中（isPlayingがtrue）の間だけ生存時間をカウントする
+        // ---------------------------------------------------------
+        if (isPlaying)
+        {
+            currentSurvivalTime += Time.deltaTime;
+            UpdateDebugDisplay();
+        }
 
-        // プレイヤーの現在位置＋見えている範囲が、次に生成すべき座標を超えたら生成
-        if (player != null && (player.position.x + spawnDistance) > nextSpawnX)
+        if (Input.GetKeyDown(KeyCode.T))
+        {
+            currentSurvivalTime = 1.5f;
+            OnPlayerDeath();
+        }
+
+        if (Input.GetKeyDown(KeyCode.E))
+        {
+            currentSurvivalTime = 12.0f;
+            OnPlayerDeath();
+        }
+
+        // プレイ中で、プレイヤーが一定距離進んだら次のピースを生成
+        if (isPlaying && player != null && (player.position.x + spawnDistance) > nextSpawnX)
         {
             SpawnNextPiece();
         }
     }
 
-    /// <summary>
-    /// プレイヤー死亡時に呼び出す関数
-    /// </summary>
     public void OnPlayerDeath()
     {
+        // 死亡した瞬間、タイマーをストップ
+        isPlaying = false;
+
         totalMissCount++;
-        SimulateAIAnalysis(currentSurvivalTime, totalMissCount);
-        currentSurvivalTime = 0f; // 生存時間をリセット
+        Debug.Log($"【ログ送信準備】死亡。生存時間: {currentSurvivalTime:F1}秒 / ミス回数: {totalMissCount}回");
+
+        StartCoroutine(SendLogToAI(currentSurvivalTime, totalMissCount, trialProbability));
+
+        // 地形とプレイヤーをリセット
+        ResetTerrain();
     }
 
-    private void SimulateAIAnalysis(float survivalTime, int missCount)
+    private IEnumerator SendLogToAI(float survivalTime, int missCount, float currentProb)
     {
-        if (missCount >= 3 && survivalTime < 3.0f)
-        {
-            trialProbability -= 0.3f + Random.Range(0f, 0.1f);
-            gmText.text = "大丈夫？少し落ち着いて。次は安全な道を用意するね。";
-        }
-        else if (survivalTime >= 10.0f)
-        {
-            trialProbability += 0.2f + Random.Range(-0.05f, 0.1f);
-            gmText.text = "惜しい！かなり進めるようになってきたね。少し難易度を上げるよ！";
-        }
-        else if (missCount < 3 && survivalTime < 4.0f)
-        {
-            trialProbability += 0.1f;
-            gmText.text = "ちょっと焦ってるかな？でもその意気だね！";
-        }
-        else
-        {
-            trialProbability -= 0.1f;
-            gmText.text = "ドンマイ！その調子で次も頑張ろう！";
-        }
+        LogData log = new LogData { survivalTime = survivalTime, missCount = missCount, currentProbability = currentProb };
+        string jsonBody = JsonUtility.ToJson(log);
 
-        trialProbability = Mathf.Clamp(trialProbability, 0.0f, 1.0f);
+        using (UnityWebRequest request = new UnityWebRequest(serverUrl, "POST"))
+        {
+            request.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(jsonBody));
+            request.downloadHandler = new DownloadHandlerBuffer();
+            request.SetRequestHeader("Content-Type", "application/json");
+
+            yield return request.SendWebRequest();
+
+            if (request.result != UnityWebRequest.Result.Success)
+            {
+                Debug.LogError("AIサーバーとの通信エラー: " + request.error);
+            }
+            else
+            {
+                string responseText = request.downloadHandler.text;
+                ResponseData response = JsonUtility.FromJson<ResponseData>(responseText);
+
+                trialProbability = response.newProbability;
+                gmText.text = response.message;
+                UpdateDebugDisplay();
+            }
+        }
     }
 
-    private void SpawnNextPiece()
+    private void ResetTerrain()
     {
+        // リセット処理中はタイマーを止める
+        isPlaying = false;
+
+        foreach (GameObject piece in spawnedPieces)
+        {
+            if (piece != null) Destroy(piece);
+        }
+        spawnedPieces.Clear();
+
+        if (player != null)
+        {
+            player.position = playerStartPos;
+            Rigidbody2D rb = player.GetComponent<Rigidbody2D>();
+            if (rb != null) rb.velocity = Vector2.zero;
+
+            PlayerController pc = player.GetComponent<PlayerController>();
+            if (pc != null)
+            {
+                pc.enabled = true;
+                pc.RespawnReset();
+            }
+            else
+            {
+                Debug.LogWarning("PlayerにPlayerControllerスクリプトが見つかりませんでした！");
+            }
+        }
+
+        nextSpawnX = playerStartPos.x; // スタート位置から開始
+        currentPieceCount = 0;
+        isGoalSpawned = false;
+
+        // ---------------------------------------------------------
+        // 【追加】最初の1個目に「スタート専用Prefab」を生成する
+        // ---------------------------------------------------------
+        if (startPrefab != null)
+        {
+            GameObject startPiece = Instantiate(startPrefab, new Vector3(nextSpawnX, spawnY, 0f), Quaternion.identity);
+            spawnedPieces.Add(startPiece);
+            nextSpawnX += pieceWidth;
+        }
+
+        // その後に続く安全な足場を生成
+        for (int i = 0; i < 3; i++)
+        {
+            SpawnNextPiece(forceSafe: true);
+        }
+
+        // ---------------------------------------------------------
+        // 【追加】初期化がすべて完了したら、タイマーをリセットしてプレイ再開
+        // ---------------------------------------------------------
+        currentSurvivalTime = 0f;
+        isPlaying = true;
+    }
+
+    private void SpawnNextPiece(bool forceSafe = false)
+    {
+        if (isGoalSpawned) return;
+
         GameObject pieceToSpawn = null;
-        float roll = Random.Range(0.0f, 1.0f);
 
-        if (roll <= trialProbability)
+        if (currentPieceCount >= piecesToGoal && goalPrefab != null)
         {
-            pieceToSpawn = trialPieces[Random.Range(0, trialPieces.Length)];
+            pieceToSpawn = goalPrefab;
+            isGoalSpawned = true;
         }
         else
         {
-            pieceToSpawn = reliefPieces[Random.Range(0, reliefPieces.Length)];
+            float roll = Random.Range(0.0f, 1.0f);
+            if (forceSafe || roll > trialProbability)
+            {
+                pieceToSpawn = reliefPieces[Random.Range(0, reliefPieces.Length)];
+            }
+            else
+            {
+                pieceToSpawn = trialPieces[Random.Range(0, trialPieces.Length)];
+            }
+            currentPieceCount++;
         }
 
         if (pieceToSpawn != null)
         {
-            // 固定位置ではなく、nextSpawnXを用いて前方に生成
             Vector3 spawnPos = new Vector3(nextSpawnX, spawnY, 0f);
-            Instantiate(pieceToSpawn, spawnPos, Quaternion.identity);
-
-            // 次の生成座標を足場1つ分右にずらす
+            GameObject newPiece = Instantiate(pieceToSpawn, spawnPos, Quaternion.identity);
+            spawnedPieces.Add(newPiece);
             nextSpawnX += pieceWidth;
         }
     }
@@ -118,5 +248,36 @@ public class MockMetaAIManager : MonoBehaviour
                              $"生存時間: {currentSurvivalTime:F1}秒\n" +
                              $"ミス回数: {totalMissCount}回";
         }
+    }
+
+    public void OnPlayerGoal()
+    {
+        // ゴールした瞬間、タイマーをストップ
+        isPlaying = false;
+
+        if (goalText != null)
+        {
+            goalText.gameObject.SetActive(true);
+        }
+
+        Debug.Log($"【ゲームクリア】生存時間: {currentSurvivalTime:F1}秒 でクリア！ 5秒後に次のステージへ移動します。");
+
+        // 生存時間を一度クリア
+        currentSurvivalTime = 0f;
+
+        StartCoroutine(WaitAndResetForGoal());
+    }
+
+    private IEnumerator WaitAndResetForGoal()
+    {
+        // 5秒間待機（この間は isPlaying = false なのでタイマーは進まない）
+        yield return new WaitForSeconds(5.0f);
+
+        if (goalText != null)
+        {
+            goalText.gameObject.SetActive(false);
+        }
+
+        ResetTerrain();
     }
 }
