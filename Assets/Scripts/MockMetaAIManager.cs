@@ -62,7 +62,7 @@ public class MockMetaAIManager : MonoBehaviour
     // 【追加】ゲームが進行中（プレイ中）かどうかを管理するフラグ
     // ---------------------------------------------------------
     private bool isPlaying = false;
-
+    private bool isThinking = false;
     void Start()
     {
         UpdateDebugDisplay();
@@ -109,18 +109,25 @@ public class MockMetaAIManager : MonoBehaviour
     {
         // 死亡した瞬間、タイマーをストップ
         isPlaying = false;
-
         totalMissCount++;
-        Debug.Log($"【ログ送信準備】死亡。生存時間: {currentSurvivalTime:F1}秒 / ミス回数: {totalMissCount}回");
 
         StartCoroutine(SendLogToAI(currentSurvivalTime, totalMissCount, trialProbability));
-
+        if (isThinking)
+        {
+            Debug.Log("AIがまだ考え中なので、今回のログ送信はスキップします。");
+        }
+        else
+        {
+            Debug.Log($"【ログ送信準備】死亡。生存時間: {currentSurvivalTime:F1}秒 / ミス回数: {totalMissCount}回");
+            StartCoroutine(SendLogToAI(currentSurvivalTime, totalMissCount, trialProbability));
+        }
         // 地形とプレイヤーをリセット
         ResetTerrain();
     }
 
     private IEnumerator SendLogToAI(float survivalTime, int missCount, float currentProb)
     {
+        isThinking = true;
         LogData log = new LogData { survivalTime = survivalTime, missCount = missCount, currentProbability = currentProb };
         string jsonBody = JsonUtility.ToJson(log);
 
@@ -146,6 +153,7 @@ public class MockMetaAIManager : MonoBehaviour
                 UpdateDebugDisplay();
             }
         }
+        isThinking = false;
     }
 
     private void ResetTerrain()

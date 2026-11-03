@@ -10,7 +10,6 @@ GameObject:
   m_Component:
   - component: {fileID: 7423814724185806011}
   - component: {fileID: 6598296329182432535}
-  - component: {fileID: 1924309649551276222}
   - component: {fileID: 7489809374114891063}
   m_Layer: 0
   m_Name: Piece_Relief
@@ -86,19 +85,6 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_MaskInteraction: 0
   m_SpriteSortPoint: 0
---- !u!114 &1924309649551276222
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8108247054133825110}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6e3330d2170fa8c4f87efea94557c2a9, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  speed: 5
 --- !u!61 &7489809374114891063
 BoxCollider2D:
   m_ObjectHideFlags: 0
